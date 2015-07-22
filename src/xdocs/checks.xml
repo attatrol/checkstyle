@@ -787,6 +787,11 @@
         <td>
         Outputs a JavaDoc tag as information.</td>
       </tr>
+      <tr>
+        <td><a href="config_javadoc.html#JavadocRegex">JavadocRegex</a></td>
+        <td>
+        Finds regular expressions in javadocs.</td>
+      </tr>
     </table>
     </section>
   </body>
