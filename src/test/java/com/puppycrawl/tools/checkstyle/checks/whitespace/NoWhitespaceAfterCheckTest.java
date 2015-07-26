@@ -21,6 +21,8 @@ package com.puppycrawl.tools.checkstyle.checks.whitespace;
 
 import static com.puppycrawl.tools.checkstyle.checks.whitespace.NoWhitespaceAfterCheck.MSG_KEY;
 
+import java.io.File;
+
 import org.junit.Before;
 import org.junit.Test;
 
@@ -81,6 +83,7 @@ public class NoWhitespaceAfterCheckTest
     @Test
     public void testArrayDeclarations() throws Exception {
         checkConfig.addAttribute("tokens", "ARRAY_DECLARATOR");
+        checkConfig.addAttribute("tokens", "INDEX_OP");
         final String[] expected = {
             "6:11: " + getCheckMessage(MSG_KEY, "Object"),
             "8:22: " + getCheckMessage(MSG_KEY, "someStuff3"),
@@ -103,11 +106,68 @@ public class NoWhitespaceAfterCheckTest
     }
 
     @Test
+    public void testArrayDeclarations2() throws Exception {
+        checkConfig.addAttribute("tokens", "ARRAY_DECLARATOR");
+        checkConfig.addAttribute("tokens", "INDEX_OP");
+        final String[] expected = {
+            "12:30: " + getCheckMessage(MSG_KEY, "]"),
+            "17:40: " + getCheckMessage(MSG_KEY, "create"),
+            "18:27: " + getCheckMessage(MSG_KEY, "int"),
+            "29:23: " + getCheckMessage(MSG_KEY, "]"),
+            "30:27: " + getCheckMessage(MSG_KEY, "int"),
+            "30:38: " + getCheckMessage(MSG_KEY, "]"),
+            "30:51: " + getCheckMessage(MSG_KEY, "]"),
+            "35:44: " + getCheckMessage(MSG_KEY, "int"),
+            "35:56: " + getCheckMessage(MSG_KEY, "]"),
+            "36:18: " + getCheckMessage(MSG_KEY, "e"),
+            "36:23: " + getCheckMessage(MSG_KEY, "]"),
+            "36:43: " + getCheckMessage(MSG_KEY, "]"),
+            "37:14: " + getCheckMessage(MSG_KEY, "e"),
+            "37:18: " + getCheckMessage(MSG_KEY, "]"),
+            "42:30: " + getCheckMessage(MSG_KEY, "Integer"),
+            "43:20: " + getCheckMessage(MSG_KEY, "]"),
+            "48:28: " + getCheckMessage(MSG_KEY, ">"),
+            "48:31: " + getCheckMessage(MSG_KEY, "]"),
+            "48:34: " + getCheckMessage(MSG_KEY, "]"),
+            "52:34: " + getCheckMessage(MSG_KEY, "int"),
+            "54:14: " + getCheckMessage(MSG_KEY, "g"),
+            "55:17: " + getCheckMessage(MSG_KEY, "]"),
+            "56:14: " + getCheckMessage(MSG_KEY, "g"),
+            "56:18: " + getCheckMessage(MSG_KEY, "]"),
+            "56:22: " + getCheckMessage(MSG_KEY, "]"),
+            "62:50: " + getCheckMessage(MSG_KEY, "create"),
+            "62:57: " + getCheckMessage(MSG_KEY, "]"),
+            "67:32: " + getCheckMessage(MSG_KEY, "boolean"),
+            "69:46: " + getCheckMessage(MSG_KEY, "String"),
+            "69:50: " + getCheckMessage(MSG_KEY, "]"),
+            "70:36: " + getCheckMessage(MSG_KEY, "String"),
+            "81:40: " + getCheckMessage(MSG_KEY, "Integer"),
+            "85:14: " + getCheckMessage(MSG_KEY, "char"),
+            "86:52: " + getCheckMessage(MSG_KEY, "A"),
+            "87:86: " + getCheckMessage(MSG_KEY, "Object"),
+            "90:41: " + getCheckMessage(MSG_KEY, ")"),
+            "90:49: " + getCheckMessage(MSG_KEY, "]"),
+            "92:35: " + getCheckMessage(MSG_KEY, "Object"),
+        };
+        verify(checkConfig, getPath("whitespace/InputNoWhitespaceAfterArrayDeclarations2.java"), expected);
+    }
+
+    @Test
     public void testNpe() throws Exception {
         final String[] expected = {
 
         };
         verify(checkConfig, getPath("whitespace/InputNoWhiteSpaceAfterCheckFormerNpe.java"),
+                 expected);
+    }
+
+    @Test
+    public void testMethodReference() throws Exception {
+        final String[] expected = {
+
+        };
+        verify(checkConfig, new File("src/test/resources-noncompilable/com/puppycrawl/tools/"
+            + "checkstyle/grammars/java8/InputMethodReferencesTest2.java").getCanonicalPath(),
                  expected);
     }
 }

@@ -40,6 +40,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  *  {@link TokenTypes#LNOT LNOT},
  *  {@link TokenTypes#UNARY_MINUS UNARY_MINUS},
  *  {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR},
+ *  {@link TokenTypes#INDEX_OP INDEX_OP}
  *  {@link TokenTypes#UNARY_PLUS UNARY_PLUS}. It also supports the operator
  *  {@link TokenTypes#TYPECAST TYPECAST}.
  * </p>
@@ -61,6 +62,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @author Rick Giles
  * @author lkuehne
  * @author <a href="mailto:nesterenko-aleksey@list.ru">Aleksey Nesterenko</a>
+ * @author attatrol
  */
 public class NoWhitespaceAfterCheck extends Check {
 
@@ -85,6 +87,7 @@ public class NoWhitespaceAfterCheck extends Check {
             TokenTypes.LNOT,
             TokenTypes.DOT,
             TokenTypes.ARRAY_DECLARATOR,
+            TokenTypes.INDEX_OP,
         };
     }
 
@@ -101,12 +104,27 @@ public class NoWhitespaceAfterCheck extends Check {
             TokenTypes.DOT,
             TokenTypes.TYPECAST,
             TokenTypes.ARRAY_DECLARATOR,
+            TokenTypes.INDEX_OP,
         };
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-        final DetailAST astNode = getPreceded(ast);
+        final DetailAST astNode;
+        switch (ast.getType()) {
+            case TokenTypes.TYPECAST:
+                astNode = ast.findFirstToken(TokenTypes.RPAREN);
+                break;
+            case TokenTypes.ARRAY_DECLARATOR:
+                astNode = getArrayDeclaratorPreviousElement(ast);
+                break;
+            case TokenTypes.INDEX_OP:
+                astNode = getIndexOpPreviousElement(ast);
+                break;
+            default:
+                astNode = ast;
+        }
+
         final String line = getLine(ast.getLineNo() - 1);
         final int after = getPositionAfter(astNode);
 
@@ -115,27 +133,6 @@ public class NoWhitespaceAfterCheck extends Check {
             log(astNode.getLineNo(), after,
                 MSG_KEY, astNode.getText());
         }
-    }
-
-    /**
-     * Gets possible place where redundant whitespace could be.
-     * @param ast Node representing token.
-     * @return possible place of redundant whitespace.
-     */
-    private static DetailAST getPreceded(DetailAST ast) {
-        DetailAST preceded;
-
-        switch (ast.getType()) {
-            case TokenTypes.TYPECAST:
-                preceded = ast.findFirstToken(TokenTypes.RPAREN);
-                break;
-            case TokenTypes.ARRAY_DECLARATOR:
-                preceded = getArrayTypeOrIdentifier(ast);
-                break;
-            default:
-                preceded = ast;
-        }
-        return preceded;
     }
 
     /**
@@ -160,148 +157,12 @@ public class NoWhitespaceAfterCheck extends Check {
     }
 
     /**
-     * Gets target place of possible redundant whitespace (array's type or identifier)
-     *  after which {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR} is set.
-     * @param arrayDeclarator {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return target place before possible redundant whitespace.
-     */
-    private static DetailAST getArrayTypeOrIdentifier(DetailAST arrayDeclarator) {
-        DetailAST typeOrIdent = arrayDeclarator;
-        if (isArrayInstantiation(arrayDeclarator)) {
-            typeOrIdent = arrayDeclarator.getParent().getFirstChild();
-        }
-        else if (isMultiDimensionalArray(arrayDeclarator)) {
-            if (isCstyleMultiDimensionalArrayDeclaration(arrayDeclarator)) {
-                if (arrayDeclarator.getParent().getType() != TokenTypes.ARRAY_DECLARATOR) {
-                    typeOrIdent = getArrayIdentifier(arrayDeclarator);
-                }
-            }
-            else {
-                DetailAST arrayIdentifier = arrayDeclarator.getFirstChild();
-                while (arrayIdentifier != null) {
-                    typeOrIdent = arrayIdentifier;
-                    arrayIdentifier = arrayIdentifier.getFirstChild();
-                }
-            }
-        }
-        else {
-            if (isCstyleArrayDeclaration(arrayDeclarator)) {
-                typeOrIdent = getArrayIdentifier(arrayDeclarator);
-            }
-            else {
-                if (isArrayUsedAsTypeForGenericBoundedWildcard(arrayDeclarator)) {
-                    typeOrIdent = arrayDeclarator.getParent();
-                }
-                else {
-                    typeOrIdent = arrayDeclarator.getFirstChild();
-                }
-            }
-        }
-        return typeOrIdent;
-    }
-
-    /**
-     * Gets array identifier, e.g.:
-     * <p>
-     * <code>
-     * int[] someArray;
-     * </code>
-     * </p>
-     * <p>
-     * someArray is identifier.
-     * </p>
-     * @param arrayDeclarator {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return array identifier.
-     */
-    private static DetailAST getArrayIdentifier(DetailAST arrayDeclarator) {
-        return arrayDeclarator.getParent().getNextSibling();
-    }
-
-    /**
-     * Checks if current array is multidimensional.
-     * @param arrayDeclaration {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return true if current array is multidimensional.
-     */
-    private static boolean isMultiDimensionalArray(DetailAST arrayDeclaration) {
-        return arrayDeclaration.getParent().getType() == TokenTypes.ARRAY_DECLARATOR
-                || arrayDeclaration.getFirstChild().getType() == TokenTypes.ARRAY_DECLARATOR;
-    }
-
-    /**
-     * Checks if current array declaration is part of array instantiation.
-     * @param arrayDeclaration {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return true if current array declaration is part of array instantiation.
-     */
-    private static boolean isArrayInstantiation(DetailAST arrayDeclaration) {
-        return arrayDeclaration.getParent().getType() == TokenTypes.LITERAL_NEW;
-    }
-
-    /**
-     * Checks if current array is used as type for generic bounded wildcard.
-     * <p>
-     * E.g. {@code <? extends String[]>} or {@code <? super Object[]>}.
-     * </p>
-     * @param arrayDeclarator {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return true if current array is used as type for generic bounded wildcard.
-     */
-    private static boolean isArrayUsedAsTypeForGenericBoundedWildcard(DetailAST arrayDeclarator) {
-        final int firstChildType = arrayDeclarator.getFirstChild().getType();
-        return firstChildType == TokenTypes.TYPE_UPPER_BOUNDS
-                || firstChildType == TokenTypes.TYPE_LOWER_BOUNDS;
-    }
-
-    /**
      * Control whether whitespace is flagged at linebreaks.
      * @param allowLineBreaks whether whitespace should be
      * flagged at linebreaks.
      */
     public void setAllowLineBreaks(boolean allowLineBreaks) {
         this.allowLineBreaks = allowLineBreaks;
-    }
-
-    /**
-     * Checks if current array is declared in C style, e.g.:
-     * <p>
-     * <code>
-     * int array[] = { ... }; //C style
-     * </code>
-     * </p>
-     * <p>
-     * <code>
-     * int[] array = { ... }; //Java style
-     * </code>
-     * </p>
-     * @param arrayDeclaration {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return true if array is declared in C style
-     */
-    private static boolean isCstyleArrayDeclaration(DetailAST arrayDeclaration) {
-        boolean result = false;
-        final DetailAST identifier = getArrayIdentifier(arrayDeclaration);
-        if (identifier != null) {
-            final int arrayDeclarationStart = arrayDeclaration.getColumnNo();
-            final int identifierEnd = identifier.getColumnNo() + identifier.getText().length();
-            result = arrayDeclarationStart == identifierEnd
-                     || arrayDeclarationStart > identifierEnd;
-        }
-        return result;
-    }
-
-    /**
-     * Works with multidimensional arrays.
-     * @param arrayDeclaration {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}
-     * @return true if multidimensional array is declared in C style.
-     */
-    private static boolean isCstyleMultiDimensionalArrayDeclaration(DetailAST arrayDeclaration) {
-        boolean result = false;
-        DetailAST parentArrayDeclaration = arrayDeclaration;
-        while (parentArrayDeclaration != null) {
-            if (parentArrayDeclaration.getParent() != null
-                    && parentArrayDeclaration.getParent().getType() == TokenTypes.TYPE) {
-                result = isCstyleArrayDeclaration(parentArrayDeclaration);
-            }
-            parentArrayDeclaration = parentArrayDeclaration.getParent();
-        }
-        return result;
     }
 
     /**
@@ -318,5 +179,163 @@ public class NoWhitespaceAfterCheck extends Check {
             }
         }
         return result;
+    }
+
+    /**
+     * Gets previous node for {@link TokenTypes#INDEX_OP INDEX_OP} token
+     * for usage in getPositionAfter method, it is a simplified copy of
+     * getArrayDeclaratorPreviousElement method.
+     * @param ast
+     *        , {@link TokenTypes#INDEX_OP INDEX_OP} node.
+     * @return previous node by text order.
+     */
+    private static DetailAST getIndexOpPreviousElement(DetailAST ast) {
+        final DetailAST firstChild = ast.getFirstChild();
+        if (firstChild.getType() == TokenTypes.INDEX_OP) {
+            //second or higher array index
+            return firstChild.findFirstToken(TokenTypes.RBRACK);
+        }
+        else {
+            return getIdentLastToken(ast); // always has an ident token
+        }
+    }
+
+    /**
+     * Returns proper argument for getPositionAfter method, it is a token after
+     * {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR}, in can be {@link TokenTypes#RBRACK
+     * RBRACK}, {@link TokenTypes#INDENT INDENT} or an array type definition (literal).
+     * @param ast
+     *        , {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR} node.
+     * @return previous node by text order.
+     */
+    private static DetailAST getArrayDeclaratorPreviousElement(DetailAST ast) {
+        final DetailAST firstChild = ast.getFirstChild();
+        if (firstChild.getType() == TokenTypes.ARRAY_DECLARATOR) {
+            //second or higher array index
+            return firstChild.findFirstToken(TokenTypes.RBRACK);
+        }
+        else {
+            //first array index, is preceded with identifier or type
+            final DetailAST parent = getArrayDeclaratorParent(ast);
+            switch (parent.getType()) {
+                //generics
+                case TokenTypes.TYPE_ARGUMENT:
+                    final DetailAST wildcard = parent.findFirstToken(TokenTypes.WILDCARD_TYPE);
+                    if (wildcard == null) {
+                        // usual generic type argument like <char[]>
+                        return getTypeLastNode(ast);
+                    }
+                    else {
+                        // constructions with wildcard like <? extends String[]>
+                        return getTypeLastNode(ast.getFirstChild());
+                    }
+                // 'new' is a special case with its own subtree structure
+                case TokenTypes.LITERAL_NEW:
+                    return getTypeLastNode(parent);
+                // mundane array declaration, can be either java style or C style
+                case TokenTypes.TYPE:
+                    return parentTypeTypeProcessing(ast, parent);
+                // i.e. boolean[].class
+                case TokenTypes.DOT:
+                    return getTypeLastNode(ast);
+                // java 8 method reference
+                case TokenTypes.METHOD_REF:
+                    return getIdentLastToken(ast);
+                default:
+                    throw new IllegalStateException("unexpected ast syntax" + parent.toString());
+            }
+        }
+    }
+
+    /**
+     * Finds previous node by text order for an array declarator,
+     * which parent type is {@link TokenTypes#TYPE TYPE}.
+     * @param ast
+     *        , array declarator node.
+     * @param parent
+     *        , its parent node.
+     * @return previous node by text order.
+     */
+    private static DetailAST parentTypeTypeProcessing(DetailAST ast, DetailAST parent) {
+        final DetailAST ident = getIdentLastToken(parent.getParent());
+        final DetailAST lastTypeNode = getTypeLastNode(ast);
+        if (ident == null) {
+            // sometimes there are ident-less sentences
+            // i.e. (Object[]) null
+            return lastTypeNode;
+        }
+        // checks whether ident or lastTypeNode has preceding position
+        // determining if it is java style or C style
+        if (ident.getLineNo() != ast.getLineNo()
+                ? ident.getLineNo() > ast.getLineNo()
+                : ident.getColumnNo() > ast.getColumnNo()) {
+            return lastTypeNode;
+        }
+        else {
+            return ident;
+        }
+    }
+
+    /**
+     * Searches parameter node for a type node.
+     * Returns it or its last node if it has an extended structure.
+     * @param ast
+     *        , subject node.
+     * @return type node.
+     */
+    private static DetailAST getTypeLastNode(DetailAST ast) {
+        DetailAST candidate = ast.findFirstToken(TokenTypes.TYPE_ARGUMENTS);
+        if (candidate != null) {
+            candidate = candidate.findFirstToken(TokenTypes.GENERIC_END);
+        }
+        else {
+            candidate = getIdentLastToken(ast);
+            if (candidate == null) {
+                candidate = ast.getFirstChild(); //primitive literal expected
+            }
+        }
+        return candidate;
+    }
+
+    /**
+     * Gets leftmost token of identifier.
+     * @param ast
+     *        , token possibly possessing an identifier.
+     * @return identifier.
+     */
+    private static DetailAST getIdentLastToken(DetailAST ast) {
+        DetailAST candidate = ast.findFirstToken(TokenTypes.IDENT);
+        if (candidate == null) {
+            final DetailAST dot = ast.findFirstToken(TokenTypes.DOT);
+            if (dot != null) { //qualified name
+                if (dot.findFirstToken(TokenTypes.DOT) != null) {
+                    candidate = dot.findFirstToken(TokenTypes.IDENT);
+                }
+                else {
+                    candidate = dot.getFirstChild().getNextSibling();
+                }
+            }
+            else {
+                final DetailAST methodCall = ast.findFirstToken(TokenTypes.METHOD_CALL);
+                if (methodCall != null) {
+                    candidate = methodCall.findFirstToken(TokenTypes.RPAREN);
+                }
+            }
+        }
+        return candidate;
+    }
+
+    /**
+     * Get node that owns ARRAY_DECLARATOR sequence.
+     * @param ast
+     *        , ARRAY_DECLARATOR node.
+     * @return owner node.
+     */
+    private static DetailAST getArrayDeclaratorParent(DetailAST ast) {
+        DetailAST parent = ast.getParent();
+        while (parent.getType() == TokenTypes.ARRAY_DECLARATOR) {
+            parent = parent.getParent();
+        }
+        return parent;
     }
 }
