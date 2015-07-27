@@ -219,4 +219,4 @@ cache:
 
 branches:
   only:
-    - master
+    -  fix1013
