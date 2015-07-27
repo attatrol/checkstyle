@@ -192,11 +192,12 @@ public class NoWhitespaceAfterCheck extends Check {
     private static DetailAST getIndexOpPreviousElement(DetailAST ast) {
         final DetailAST firstChild = ast.getFirstChild();
         if (firstChild.getType() == TokenTypes.INDEX_OP) {
-            //second or higher array index
+            // second or higher array index
             return firstChild.findFirstToken(TokenTypes.RBRACK);
         }
         else {
-            return getIdentLastToken(ast); // always has an ident token
+            // always has an ident token
+            return getIdentLastToken(ast);
         }
     }
 
@@ -211,38 +212,43 @@ public class NoWhitespaceAfterCheck extends Check {
     private static DetailAST getArrayDeclaratorPreviousElement(DetailAST ast) {
         final DetailAST firstChild = ast.getFirstChild();
         if (firstChild.getType() == TokenTypes.ARRAY_DECLARATOR) {
-            //second or higher array index
+            // second or higher array index
             return firstChild.findFirstToken(TokenTypes.RBRACK);
         }
         else {
-            //first array index, is preceded with identifier or type
+            // first array index, is preceded with identifier or type
             final DetailAST parent = getArrayDeclaratorParent(ast);
-            switch (parent.getType()) {
-                //generics
-                case TokenTypes.TYPE_ARGUMENT:
-                    final DetailAST wildcard = parent.findFirstToken(TokenTypes.WILDCARD_TYPE);
-                    if (wildcard == null) {
-                        // usual generic type argument like <char[]>
-                        return getTypeLastNode(ast);
-                    }
-                    else {
-                        // constructions with wildcard like <? extends String[]>
-                        return getTypeLastNode(ast.getFirstChild());
-                    }
-                // 'new' is a special case with its own subtree structure
-                case TokenTypes.LITERAL_NEW:
-                    return getTypeLastNode(parent);
-                // mundane array declaration, can be either java style or C style
-                case TokenTypes.TYPE:
-                    return parentTypeTypeProcessing(ast, parent);
-                // i.e. boolean[].class
-                case TokenTypes.DOT:
+            final int parentType = parent.getType();
+            // generics
+            if (parentType == TokenTypes.TYPE_ARGUMENT) {
+                final DetailAST wildcard = parent.findFirstToken(TokenTypes.WILDCARD_TYPE);
+                if (wildcard == null) {
+                    // usual generic type argument like <char[]>
                     return getTypeLastNode(ast);
-                // java 8 method reference
-                case TokenTypes.METHOD_REF:
-                    return getIdentLastToken(ast);
-                default:
-                    throw new IllegalStateException("unexpected ast syntax" + parent.toString());
+                }
+                else {
+                    // constructions with wildcard like <? extends String[]>
+                    return getTypeLastNode(ast.getFirstChild());
+                }
+            }
+            // 'new' is a special case with its own subtree structure
+            else if (parentType == TokenTypes.LITERAL_NEW) {
+                return getTypeLastNode(parent);
+            }
+            // mundane array declaration, can be either java style or C style
+            else if (parentType == TokenTypes.TYPE) {
+                return parentTypeTypeProcessing(ast, parent);
+            }
+            // i.e. boolean[].class
+            else if (parentType == TokenTypes.DOT) {
+                return getTypeLastNode(ast);
+            }
+            // java 8 method reference
+            else if (parentType == TokenTypes.METHOD_REF) {
+                return getIdentLastToken(ast);
+            }
+            else {
+                throw new IllegalStateException("unexpected ast syntax" + parent.toString());
             }
         }
     }
@@ -291,7 +297,8 @@ public class NoWhitespaceAfterCheck extends Check {
         else {
             candidate = getIdentLastToken(ast);
             if (candidate == null) {
-                candidate = ast.getFirstChild(); //primitive literal expected
+                //primitive literal expected
+                candidate = ast.getFirstChild();
             }
         }
         return candidate;
@@ -301,13 +308,15 @@ public class NoWhitespaceAfterCheck extends Check {
      * Gets leftmost token of identifier.
      * @param ast
      *        , token possibly possessing an identifier.
-     * @return identifier.
+     * @return leftmost token of identifier.
      */
     private static DetailAST getIdentLastToken(DetailAST ast) {
+        // single identifier token as a name is the most common case
         DetailAST candidate = ast.findFirstToken(TokenTypes.IDENT);
         if (candidate == null) {
             final DetailAST dot = ast.findFirstToken(TokenTypes.DOT);
-            if (dot != null) { //qualified name
+            // qualified name case
+            if (dot != null) {
                 if (dot.findFirstToken(TokenTypes.DOT) != null) {
                     candidate = dot.findFirstToken(TokenTypes.IDENT);
                 }
@@ -315,6 +324,7 @@ public class NoWhitespaceAfterCheck extends Check {
                     candidate = dot.getFirstChild().getNextSibling();
                 }
             }
+            // method call case
             else {
                 final DetailAST methodCall = ast.findFirstToken(TokenTypes.METHOD_CALL);
                 if (methodCall != null) {
@@ -326,9 +336,9 @@ public class NoWhitespaceAfterCheck extends Check {
     }
 
     /**
-     * Get node that owns ARRAY_DECLARATOR sequence.
+     * Get node that owns {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR} sequence.
      * @param ast
-     *        , ARRAY_DECLARATOR node.
+     *        , {@link TokenTypes#ARRAY_DECLARATOR ARRAY_DECLARATOR} node.
      * @return owner node.
      */
     private static DetailAST getArrayDeclaratorParent(DetailAST ast) {

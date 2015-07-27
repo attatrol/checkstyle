@@ -26,8 +26,12 @@ import java.io.File;
 import org.junit.Before;
 import org.junit.Test;
 
+import antlr.CommonHiddenStreamToken;
+
 import com.puppycrawl.tools.checkstyle.BaseCheckTestSupport;
 import com.puppycrawl.tools.checkstyle.DefaultConfiguration;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
 public class NoWhitespaceAfterCheckTest
     extends BaseCheckTestSupport {
@@ -169,5 +173,42 @@ public class NoWhitespaceAfterCheckTest
         verify(checkConfig, new File("src/test/resources-noncompilable/com/puppycrawl/tools/"
             + "checkstyle/grammars/java8/InputMethodReferencesTest2.java").getCanonicalPath(),
                  expected);
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testVisitTokenSwitchReflection() throws Exception {
+
+        //unexpected parent for ARRAY_DECLARALOR token
+        final DetailAST astImport = mockAST(TokenTypes.IMPORT, "import", "mockfile", 0, 0);
+        final DetailAST astArrayDeclarator = mockAST(TokenTypes.ARRAY_DECLARATOR, "[", "mockfile", 0, 10);
+        final DetailAST astRBrake = mockAST(TokenTypes.RBRACK, "[", "mockfile", 0, 11);
+        astImport.addChild(astArrayDeclarator);
+        astArrayDeclarator.addChild(astRBrake);
+
+        NoWhitespaceAfterCheck check = new NoWhitespaceAfterCheck();
+        // expecting IllegalStateException
+        check.visitToken(astArrayDeclarator);
+    }
+
+    /**
+     * Creates MOCK lexical token and returns AST node for this token
+     * @param tokenType type of token
+     * @param tokenText text of token
+     * @param tokenFileName file name of token
+     * @param tokenRow token position in a file (row)
+     * @param tokenColumn token position in a file (column)
+     * @return AST node for the token
+     */
+    private static DetailAST mockAST(final int tokenType, final String tokenText,
+            final String tokenFileName, final int tokenRow, final int tokenColumn) {
+        CommonHiddenStreamToken tokenImportSemi = new CommonHiddenStreamToken();
+        tokenImportSemi.setType(tokenType);
+        tokenImportSemi.setText(tokenText);
+        tokenImportSemi.setLine(tokenRow);
+        tokenImportSemi.setColumn(tokenColumn);
+        tokenImportSemi.setFilename(tokenFileName);
+        DetailAST astSemi = new DetailAST();
+        astSemi.initialize(tokenImportSemi);
+        return astSemi;
     }
 }
